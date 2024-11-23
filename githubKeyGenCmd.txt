@@ -1,0 +1,29 @@
+### GENERATING SSH KEY FOR GITHUB ###
+
+
+$ ssh-keygen -t ed25519 -C "<email address>@gmail.com"
+
+$ cat ~/.ssh/id_ed25519.pub
+-copy and paste to Github SSH Key creation
+
+
+## CREATE LOCAL REPO > CREATE NEW REMOTE REPO > PUSH LOCAL REPO TO REMOTE ##
+
+-go to root of the folder you wish to make a repo
+
+$ git init
+
+$ git add .
+
+$ git commit -m "Initial Commit"
+
+# add remote repo to local
+
+$ git remote add origin git@github.com:GReapSoww7/<repo-name>.git
+
+# Push Local to GitHub
+
+$ git branch -M main
+
+$ git push -u origin main
+

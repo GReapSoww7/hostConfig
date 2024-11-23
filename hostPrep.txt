@@ -1,0 +1,118 @@
+### HOST MACHINE PREPARATION FOR HOST VM TO ALLOW NESTED VIRTUALIZATION ###
+
+-Ensure VT-x and VT-d (or AMD-V) is enabled in BIOS and in VBox Settings for the Host VM
+	-also check Task Manager > Performance > CPU > Virtualization: Enabled
+
+#############################################################################
+	
+// ON HOST MACHINE RUN THE FOLLOWING
+	-the VBox HOST VM must be registered with VBoxManage tool
+	-Hyper-V, VMP, and WSL2 must be disabled
+
+
+# ON HOST MACHINE POWERSHELL PROMPT
+
+> Disable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
+> Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All
+> Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
+
+> dism.exe /online /Disable-Feature /FeatureName:Microsoft-Hyper-V-Platform
+> dism.exe /online /Disable-Feature /FeatureName:VirtualMachinePlatform
+> dism.exe /online /Disable-Feature /FeatureName:Microsoft-Windows-Subsystem-Linux
+
+
+
+
+# Path
+C:\Program Files\Oracle\VirtualBox> VBoxManage.exe
+
+# Register
+
+> VBoxManage.exe registervm "C:\Users\<userName>\VirtualBox VMs\<VM Name>\<VM Name>.vbox"
+
+# Verify
+
+> VBoxManage.exe list vms
+
+# Modify
+
+> VBoxManage.exe modifyvm "<VM Name>" --nested-hw-virt on
+
+# Verify
+
+> VBoxManage.exe showvminfo "<VM Name>"
+
+
+###########################################################################
+
+// INSTALL VIRTUALIZATION TOOLS INSIDE THE VBox VM
+
+$ sudo pacman -Syu
+
+# Install KVM, QEMU, etc tools
+$ sudo pacman -S qemu libvirt virt-manager
+
+
+# Install KVM modules to support within guest
+
+$ sudo modprobe kvm
+$ sudo modprobe kvm_intel
+####$ sudo modprobe kvm_amd # for AMD processors
+
+# check if KVM is loaded
+
+$ lsmod | grep kvm
+
+
+# Enable User Group for Virt
+
+$ sudo usermod -aG libvirt $(whoami) (or use $USER)
+
+# ENABLE Libvirt
+
+$ sudo systemctl enable --now libvirtd
+
+$ sudo systemctl status libvirtd
+
+
+# Verify
+
+$ kvm-ok
+
+
+#################################################################
+
+### ON HOST MACHINE ###
+
+// Config VBox to use Virt Extensions
+
+# Enable I/O APIC (recommended)
+	-in VBox Settings or using VBoxManage
+
+C:\Program Files\Oracle\VirtualBox> VBoxManage.exe "<VM Name>" --ioapic on
+
+> VBoxManage.exe "<VM Name>" --hwvirtex on
+
+#OPTIONAL
+
+> VBoxManage.exe "<VM Name>" --efi on
+
+#####################################################################
+
+
+### ON ARCH LINUX VM ###
+
+// Test Virtualization
+
+
+# Use virt-manager to create and manage VMs inside my Arch Linux VM
+
+
+#OR
+
+# try running QEMU directly
+
+$ qemu-system-x86_64 -enable-kvm -cpu host -m 2048
+
+
+

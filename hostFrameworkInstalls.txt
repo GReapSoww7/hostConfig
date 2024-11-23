@@ -1,0 +1,124 @@
+#HOST MACHINE VM Linux Deps
+$ sudo pacman -S linux-headers virtualbox virtualbox-host-modules
+
+#Enable nested virtualization for VBox to run inside the VM
+
+$ sudo modprobe -r kvm_intel kvm_amd #unload any existing kernel modules
+$ sudo modprobe kvm_intel nested=1 #Intel processor
+
+###sudo modprobe kvm_amd nested=1 #AMD processor
+
+#add config to /etc/modules-load.d for persistent nested virtualization
+
+$ echo "kvm_intel" | sudo tee /etc/modules-load.d/kvm_intel.conf
+
+#ensure VBox is set to support VT-x on nested VMs:
+$ VBoxManage setextradata global VBoxInternal/CPUM/EnableNestedVT 1
+
+#restart Arch Linux VM
+$ sudo reboot
+
+
+#TOOL INSTALLATION
+##################
+
+#TERRAFORM
+
+$ sudo pacman -S terraform
+
+
+#ANSIBLE
+
+$ sudo pacman -S ansible
+
+
+#GITLAB RUNNER (CI/CD jobs local)
+
+$ sudo pacman -S gitlab-runner
+
+
+###################################################################################
+
+#OPTIONAL
+#JENKINS (CI/CD)
+
+$ yay -S jenkins
+
+###################################################################################
+
+### KUBERNETES
+
+#KUBECTL
+
+$ sudo pacman -S kubectl
+
+
+#KUBECTL HOST CONFIG (point to the control plane API Server for external cluster config)
+
+-ON THE NESTED CONTROL PLANE NAVIGATE/COPY THE FOLLOWING FILE
+	-KUBECONFIG
+[controlplane@kubernetes~]$ cp /etc/kubernetes/admin.conf
+
+-COPY IT TO THE HOST VM ~/.kube/config FILE
+
+$ nvim ~/.kube/config
+-PASTE
+-DONE
+
+
+#KUBEADM
+
+$ sudo pacman -S kubeadm
+
+#KUBELET
+
+$ sudo pacman -S kubelet
+
+$ sudo systemctl enable --now kubelet
+
+###########################################################################
+
+
+#HELM (to deploy Istio)
+
+$ sudo pacman -S helm
+
+#ENSURE HELM CAN USE KUBECTL
+-use same controlplane admin.conf file config for the HELM kubeconfig
+
+$ helm version 
+(if everything was set up correctly then it will use the host kubeconfig file)
+
+####################################################################
+
+
+#OPTIONAL DEPLOY ISTIO TO K8s CLUSTER USING HELM
+
+$ helm repo add istio https://istio-release.storage.googleapis.com/charts
+$ helm repo update
+$ helm install istio-base istio/base
+$ helm install istiod istio/istiod
+
+
+#############################################################
+
+#ISTIO (Host config management of the Kubernetes cluster)
+
+$ curl -L https://istio.io/downloadIstio | sh -
+$ cd istio-<version>/bin
+$ sudo cp istioctl /usr/local/bin/
+
+$ istioctl install --set profile=default
+
+##############################################################################
+
+#CNI PLUGIN [CILIUM] MANAGEMENT FROM HOST USING HELM (can also use kubectl)
+
+$ helm repo add cilium https://helm.cilium.io/
+$ helm repo update
+$ helm install cilium cilium/cilium --namespace kube-system
+
+#CNI PLUGIN [CALICO] USING KUBECTL
+
+$ kubectl create -f https://docs.projectcalico.org/manifests/calico.yaml
+

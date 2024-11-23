@@ -1,0 +1,69 @@
+### NESTED VMs (Control Plane/Worker Nodes)
+
+#KUBERNETES COMPONENTS
+
+$ sudo pacman -S kubectl kubeadm kubelet
+
+$ sudo systemctl enable --now kubelet
+
+
+#CONTAINERD RUNTIME
+
+$ sudo pacman -S containerd
+$ sudo systemctl enable --now containerd
+$ sudo systemctl status containerd
+
+
+
+#INTIALIZE THE CLUSTER
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16 --cri-socket=/run/containerd/containerd.sock
+
+-copy the kubeconfig file and paste to HOST VM ~/.kube/config file
+
+#THE FOLLOWING I CAN DO FROM THE HOST VM (DO NOT NEED TO INSTALL ON THE CONTROL PLANE NODE OR WORKER NODES)
+
+
+
+
+
+#####################################################################
+
+
+#CNI PLUGIN (HOST-ONLY or BRIDGED NETOWORKING in VBOX)
+	## USE KUBECTL OR HELM >> REFER TO hostFrameworkInstalls write up
+
+#CNI PLUGIN [CILIUM] MANAGEMENT FROM HOST USING HELM (can also use kubectl)
+
+$ helm repo add cilium https://helm.cilium.io/
+$ helm repo update
+$ helm install cilium cilium/cilium
+
+#CNI PLUGIN [CALICO] USING KUBECTL
+
+$ kubectl create -f https://docs.projectcalico.org/manifests/calico.yaml
+
+######################################
+
+#HELM
+
+$ sudo pacman -S helm
+
+
+
+#ISTIO (Control Plane NODE)
+
+$ curl -L https://istio.io/downloadIstio | sh -
+$ cd istio-<version>/bin
+$ sudo cp istioctl /usr/local/bin
+$ istioctl install --set profile=default
+
+
+#OR BY USING HELM FOR ISTIO (or PROMETHEUS, NGINX, ETC)
+
+$ helm repo add istio https://istio-release.storage.googleapis.com/charts
+$ helm repo update
+$ helm install istio-base istio/base
+$ helm install istiod istio/istiod
+
+
+
