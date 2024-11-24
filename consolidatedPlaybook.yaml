@@ -1,0 +1,164 @@
+---
+- name: Setup Kubernetes Cluster
+  hosts: all
+  become: true
+  vars:
+    kubernetes_version: "{{ lookup('env', 'KUBERNETES_VERSION') }}"
+    cilium_version: "1.13.0"
+    control_ip: "{{ lookup('env', 'CONTROL_IP') }}"
+    pod_cidr: "{{ lookup('env', 'POD_CIDR') }}"
+    service_cidr: "{{ lookup('env', 'SERVICE_CIDR') }}"
+    kubeadm_token: "{{ hostvars['control-plane']['kubeadm_token'] }}"  # Or use another method to pass the token
+    dashboard_version: "{{ lookup('env', 'DASHBOARD_VERSION') }}"  # Use an env var for dashboard version
+    config_path: "/vagrant/configs"
+
+  tasks:
+    - name: Install common packages
+      apt:
+        name:
+          - curl
+          - apt-transport-https
+          - ca-certificates
+          - software-properties-common
+        state: present
+        update_cache: yes
+
+    - name: Disable swap
+      command: swapoff -a
+
+    - name: Disable swap on reboot
+      cron:
+        name: "Disable swap"
+        minute: "@reboot"
+        job: "/sbin/swapoff -a"
+
+    - name: Install kubelet, kubectl, kubeadm
+      apt:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - kubelet={{ kubernetes_version }}
+        - kubectl={{ kubernetes_version }}
+        - kubeadm={{ kubernetes_version }}
+
+    - name: Install Helm
+      shell: |
+        curl https://get.helm.sh/helm-v3.10.3-linux-amd64.tar.gz -o helm.tar.gz
+        tar -xzvf helm.tar.gz
+        mv linux-amd64/helm /usr/local/bin/helm
+      args:
+        creates: /usr/local/bin/helm
+
+    - name: Add Cilium Helm repository
+      command: helm repo add cilium https://helm.cilium.io/
+
+    - name: Update Helm repositories
+      command: helm repo update
+
+    - name: Install Cilium with Helm
+      command: helm install cilium cilium/cilium --version "{{ cilium_version }}" --namespace kube-system --set cilium.config.ipv6-enabled=false
+
+    - name: Initialize Kubernetes on Control Plane
+      command: kubeadm init --apiserver-advertise-address={{ control_ip }} --pod-network-cidr={{ pod_cidr }} --service-cidr={{ service_cidr }} --ignore-preflight-errors Swap
+      when: inventory_hostname == 'controlplane'
+
+    - name: Copy kubeconfig to home directory for vagrant user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/vagrant/.kube/config"
+        owner: vagrant
+        group: vagrant
+      when: inventory_hostname == 'controlplane'
+
+    - name: Generate join.sh for worker nodes
+      when: inventory_hostname == 'controlplane'
+      shell: |
+        kubeadm token create --print-join-command > /tmp/join.sh
+        chmod +x /tmp/join.sh
+      register: join_command_output
+
+    - name: Copy join.sh to worker nodes
+      when: inventory_hostname == 'controlplane'
+      copy:
+        src: /tmp/join.sh
+        dest: "/vagrant/configs/join.sh"
+        mode: '0755'
+
+    - name: Setup worker node to join Kubernetes cluster
+      shell: "/vagrant/configs/join.sh"
+      when: inventory_hostname != 'controlplane'
+
+    - name: Install Metrics Server and wait for readiness
+      shell: |
+        kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.6.1/components.yaml
+        while kubectl get pods -A -l k8s-app=metrics-server | awk 'split($3, a, "/") && a[1] != a[2] { print $0; }' | grep -v "RESTARTS"; do
+          echo 'Waiting for metrics server to be ready...'
+          sleep 5
+        done
+        echo 'Metrics server is ready.'
+      when: inventory_hostname == 'controlplane'
+
+    - name: Create Kubernetes Dashboard Namespace and RBAC
+      when: inventory_hostname == 'controlplane'
+      block:
+        - name: Create kubernetes-dashboard namespace
+          kubectl:
+            state: present
+            namespace: kubernetes-dashboard
+            resource: namespace
+
+        - name: Create ServiceAccount for admin-user
+          kubectl:
+            state: present
+            namespace: kubernetes-dashboard
+            resource: serviceaccount
+            name: admin-user
+
+        - name: Create Secret for admin-user
+          kubectl:
+            state: present
+            namespace: kubernetes-dashboard
+            resource: secret
+            name: admin-user
+            type: kubernetes.io/service-account-token
+            annotations:
+              kubernetes.io/service-account.name: admin-user
+
+        - name: Create ClusterRoleBinding for admin-user
+          kubectl:
+            state: present
+            resource: clusterrolebinding
+            name: admin-user
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: cluster-admin
+            subjects:
+              - kind: ServiceAccount
+                name: admin-user
+                namespace: kubernetes-dashboard
+
+    - name: Deploy the Kubernetes Dashboard
+      when: inventory_hostname == 'controlplane'
+      shell: |
+        sudo -i -u vagrant kubectl apply -f "https://raw.githubusercontent.com/kubernetes/dashboard/v{{ dashboard_version }}/aio/deploy/recommended.yaml"
+
+    - name: Save dashboard token
+      when: inventory_hostname == 'controlplane'
+      shell: |
+        sudo -i -u vagrant kubectl -n kubernetes-dashboard get secret/admin-user -o go-template="{{.data.token | base64decode}}" > "{{ config_path }}/token"
+        echo "The following token was also saved to: configs/token"
+        cat "{{ config_path }}/token"
+      register: dashboard_token_output
+
+    - name: Provide login URL for dashboard
+      when: inventory_hostname == 'controlplane'
+      debug:
+        msg: |
+          "Use this token to log in at:
+           http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/overview?namespace=kubernetes-dashboard
+           Token: {{ dashboard_token_output.stdout }}"
+
+    - name: Install Kubernetes dashboard on last worker node
+      shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v{{ dashboard_version }}/aio/deploy/recommended.yaml
+      when: inventory_hostname == 'node{{ num_worker_nodes }}'
