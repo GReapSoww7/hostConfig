@@ -52,6 +52,8 @@ $ sudo pacman -Syu
 # Install KVM, QEMU, etc tools
 $ sudo pacman -S qemu libvirt virt-manager
 
+# Check if cpu supports
+$ greap -E 'vmx' /proc/cpuinfo
 
 # Install KVM modules to support within guest
 
@@ -91,11 +93,11 @@ $ kvm-ok
 
 C:\Program Files\Oracle\VirtualBox> VBoxManage.exe "<VM Name>" --ioapic on
 
-> VBoxManage.exe "<VM Name>" --hwvirtex on
+> VBoxManage.exe modifyvm "<VM Name>" --hwvirtex on
 
 #OPTIONAL
 
-> VBoxManage.exe "<VM Name>" --efi on
+> VBoxManage.exe modifyvm "<VM Name>" --efi on
 
 #####################################################################
 
