@@ -20,6 +20,8 @@
 > dism.exe /online /Disable-Feature /FeatureName:VirtualMachinePlatform
 > dism.exe /online /Disable-Feature /FeatureName:Microsoft-Windows-Subsystem-Linux
 
+### GO INTO REGISTRY AND SET THE START VALUE FOR ALL Hyper-V REGISTRY ENTRIES TO 4 !!!!!!!
+
 
 
 
